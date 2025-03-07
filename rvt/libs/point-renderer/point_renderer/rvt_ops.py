@@ -14,8 +14,8 @@ def batched_index_select(inp, dim, index):
     expanse = list(inp.shape)
     expanse[0] = -1
     expanse[dim] = -1
-    index = index.view(views).expand(expanse)
-    return torch.gather(inp, dim, index)
+    index = index.view(views).expand(expanse) # torch.Size([288, 4, 128])
+    return torch.gather(inp, dim, index) # torch.Size([288, 256, 128])的第二个维度256中根据4个索引来选
 
 
 # TODO: break into two functions
@@ -47,7 +47,7 @@ def select_feat_from_hm(
     pt_cam_wei[pt_cam[:, :, 0] > (w - 1)] = 0
     pt_cam_wei[pt_cam[:, :, 1] > (h - 1)] = 0
 
-    pt_cam = pt_cam.unsqueeze(2).repeat([1, 1, 4, 1])
+    pt_cam = pt_cam.unsqueeze(2).repeat([1, 1, 4, 1]) # torch.Size([288, 1, 4, 2])
     # later used for calculating weight
     pt_cam_con = pt_cam.detach().clone()
 
@@ -60,7 +60,7 @@ def select_feat_from_hm(
     pt_cam[:, :, 2, 1] = torch.floor(pt_cam[:, :, 2, 1])
     pt_cam[:, :, 3, 0] = torch.ceil(pt_cam[:, :, 3, 0])
     pt_cam[:, :, 3, 1] = torch.ceil(pt_cam[:, :, 3, 1])
-    pt_cam = pt_cam.long()  # [nc, npt, 4, 2]
+    pt_cam = pt_cam.long()  # [nc, npt, 4, 2] 原本是小数表示，现在取整变成指定的patch方格
     # since we are taking modulo, points at the edge, i,e at h or w will be
     # mapped to 0. this will make their distance from the continous location
     # large and hence they won't matter. therefore we don't need an explicit
@@ -72,22 +72,22 @@ def select_feat_from_hm(
     # getting normalized weight for each discrete location for pt
     # weight based on distance of point from the discrete location
     # [nc, npt, 4]
-    pt_cam_dis = 1 / (torch.sqrt(torch.sum((pt_cam_con - pt_cam) ** 2, dim=-1)) + 1e-10)
-    pt_cam_wei = pt_cam_wei.unsqueeze(-1) * pt_cam_dis
+    pt_cam_dis = 1 / (torch.sqrt(torch.sum((pt_cam_con - pt_cam) ** 2, dim=-1)) + 1e-10) # torch.Size([288, 1, 4])
+    pt_cam_wei = pt_cam_wei.unsqueeze(-1) * pt_cam_dis # torch.Size([288, 1, 4])
     _pt_cam_wei = torch.sum(pt_cam_wei, dim=-1, keepdim=True)
     _pt_cam_wei[_pt_cam_wei == 0.0] = 1
     # cached pt_cam_wei in select_feat_from_hm_cache
-    pt_cam_wei = pt_cam_wei / _pt_cam_wei  # [nc, npt, 4]
+    pt_cam_wei = pt_cam_wei / _pt_cam_wei  # [nc, npt, 4] 归一化
 
     # transforming indices from 2D to 1D to use pytorch gather
-    hm = hm.permute(0, 2, 3, 1).view(nc, h * w, nw)  # [nc, h * w, nw]
+    hm = hm.permute(0, 2, 3, 1).view(nc, h * w, nw)  # [nc, h * w, nw] torch.Size([288, 128, 16, 16]) -> torch.Size([288, 256, 128])
     pt_cam = pt_cam.view(nc, 4 * npt, 2)  # [nc, 4 * npt, 2]
     # cached pt_cam in select_feat_from_hm_cache
-    pt_cam = (pt_cam[:, :, 1] * w) + pt_cam[:, :, 0]  # [nc, 4 * npt]
+    pt_cam = (pt_cam[:, :, 1] * w) + pt_cam[:, :, 0]  # [nc, 4 * npt] 基于行列的二维索引转化为行优先一维索引
     # [nc, 4 * npt, nw]
-    pt_cam_val = batched_index_select(hm, dim=1, index=pt_cam)
+    pt_cam_val = batched_index_select(hm, dim=1, index=pt_cam) 
     # tranforming back each discrete location of point
-    pt_cam_val = pt_cam_val.view(nc, npt, 4, nw)
+    pt_cam_val = pt_cam_val.view(nc, npt, 4, nw) # torch.Size([288, 1, 4, 128])
     # summing weighted contribution of each discrete location of a point
     # [nc, npt, nw]
     pt_cam_val = torch.sum(pt_cam_val * pt_cam_wei.unsqueeze(-1), dim=2)

@@ -105,6 +105,7 @@ class Attention(nn.Module):  # is all you need. Living up to its name.
         self.dropout = nn.Dropout(self.dropout_p)
 
         self.avail_xf = False
+        # use_fast = None
         if self.use_fast:
             if not xops is None:
                 self.avail_xf = True

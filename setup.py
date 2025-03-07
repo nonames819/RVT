@@ -21,7 +21,7 @@ requirements = [
     "tensorflow",
     "pyquaternion",
     "matplotlib",
-    "bitsandbytes==0.38.1",
+    "bitsandbytes==0.41.0",
     "transforms3d",
     "clip @ git+https://github.com/openai/CLIP.git",
 ]
@@ -46,7 +46,7 @@ setup(
     install_requires=requirements,
     extras_require={
         "xformers": [
-            "xformers @ git+https://github.com/facebookresearch/xformers.git@main#egg=xformers",
+            "xformers @ git+https://github.com/facebookresearch/xformers.git@v0.0.22#egg=xformers"
         ]
     },
 )

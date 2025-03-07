@@ -205,19 +205,19 @@ class MVT(nn.Module):
                 (self.num_img, 3, self.img_size, self.img_size)
             )
             self.pixel_loc[:, 0, :, :] = (
-                torch.linspace(-1, 1, self.num_img).unsqueeze(-1).unsqueeze(-1)
+                torch.linspace(-1, 1, self.num_img).unsqueeze(-1).unsqueeze(-1) # torch.Size([3, 1, 1])
             )
             self.pixel_loc[:, 1, :, :] = (
-                torch.linspace(-1, 1, self.img_size).unsqueeze(0).unsqueeze(-1)
+                torch.linspace(-1, 1, self.img_size).unsqueeze(0).unsqueeze(-1) # torch.Size([1, 224, 1])
             )
             self.pixel_loc[:, 2, :, :] = (
-                torch.linspace(-1, 1, self.img_size).unsqueeze(0).unsqueeze(0)
-            )
+                torch.linspace(-1, 1, self.img_size).unsqueeze(0).unsqueeze(0) # torch.Size([1, 1, 224])
+            ) # 第二个维度是编码维度，对每个视图的每个位置都进行编码，例如self.pixel_loc[1,:,3,3]=tensor([ 0.0000, -0.9731, -0.9731])
         if self.add_depth:
             inp_img_feat_dim += 1
 
         # img input preprocessing encoder
-        if self.inp_pre_pro:
+        if self.inp_pre_pro: # 多进行一次1*1卷积预处理，通道数变为self.im_channels
             self.input_preprocess = Conv2DBlock(
                 inp_img_feat_dim,
                 self.im_channels,
@@ -227,7 +227,7 @@ class MVT(nn.Module):
                 activation=activation,
             )
             inp_pre_out_dim = self.im_channels
-        else:
+        else: # 不进行1*1卷积预处理，通道数为10不变
             # identity
             self.input_preprocess = lambda x: x
             inp_pre_out_dim = inp_img_feat_dim
@@ -239,7 +239,7 @@ class MVT(nn.Module):
                 self.im_channels,
                 norm="group",
                 activation=activation,
-            )
+            ) 
 
         self.patchify = Conv2DBlock(
             inp_pre_out_dim,
@@ -336,7 +336,7 @@ class MVT(nn.Module):
                 activation=None,
             )
 
-        if not self.no_feat:
+        if not self.no_feat: # no_feat为True不需要返回特征
             feat_fc_dim = 0
             feat_fc_dim += self.input_dim_before_seq
             if self.cvx_up:
@@ -366,7 +366,7 @@ class MVT(nn.Module):
 
             feat_out_size = feat_dim
 
-            if self.rot_ver == 0:
+            if self.rot_ver == 0: # 两种不同版本的旋转预测方式
                 self.feat_fc = get_feat_fc(
                     self.num_img * feat_fc_dim,
                     feat_out_size,
@@ -377,12 +377,12 @@ class MVT(nn.Module):
                 if feat_out_size_ex_rot > 0:
                     self.feat_fc_ex_rot = get_feat_fc(
                         self.num_img * feat_fc_dim, feat_out_size_ex_rot
-                    )
+                    ) # 与旋转无关的特征数量
 
                 self.feat_fc_init_bn = nn.BatchNorm1d(self.num_img * feat_fc_dim)
                 self.feat_fc_pe = FixedPositionalEncoding(
                     self.num_img * feat_fc_dim, feat_scale_factor=1
-                )
+                ) # 固定位置编码
                 self.feat_fc_x = get_feat_fc(self.num_img * feat_fc_dim, self.num_rot)
                 self.feat_fc_y = get_feat_fc(self.num_img * feat_fc_dim, self.num_rot)
                 self.feat_fc_z = get_feat_fc(self.num_img * feat_fc_dim, self.num_rot)
@@ -434,11 +434,11 @@ class MVT(nn.Module):
         img = img.view(bs * num_img, img_feat_dim, h, w)
         # preprocess
         # (bs * num_img, im_channels, h, w)
-        d0 = self.input_preprocess(img)
+        d0 = self.input_preprocess(img) # torch.Size([288, 10, 224, 224])
 
         # (bs * num_img, im_channels, h, w) ->
         # (bs * num_img, im_channels, h / img_patch_strid, w / img_patch_strid) patches
-        ins = self.patchify(d0)
+        ins = self.patchify(d0)  # torch.Size([288, 64, 16, 16])
         # (bs, im_channels, num_img, h / img_patch_strid, w / img_patch_strid) patches
         ins = (
             ins.view(
@@ -450,14 +450,14 @@ class MVT(nn.Module):
             )
             .transpose(1, 2)
             .clone()
-        )
+        ) # torch.Size([96, 64, 3, 16, 16])
 
         # concat proprio
         _, _, _d, _h, _w = ins.shape
         if self.add_proprio:
             p = self.proprio_preprocess(proprio)  # [B,4] -> [B,64]
             p = p.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).repeat(1, 1, _d, _h, _w)
-            ins = torch.cat([ins, p], dim=1)  # [B, 128, num_img, np, np]
+            ins = torch.cat([ins, p], dim=1)  # [B, 128, num_img, np, np] 使用连接方式融合，每一个patch的feature都被与同样的proprio.特征拼接
 
         # channel last
         ins = rearrange(ins, "b d ... -> b ... d")  # [B, num_img, np, np, 128]
@@ -466,7 +466,7 @@ class MVT(nn.Module):
         ins_orig_shape = ins.shape
 
         # flatten patches into sequence
-        ins = rearrange(ins, "b ... d -> b (...) d")  # [B, num_img * np * np, 128]
+        ins = rearrange(ins, "b ... d -> b (...) d")  # [B, num_img * np * np, 128] flatten掉中间维度，留下bs和dim
         # add learable pos encoding
         # only added to image tokens
         if self.pe_fix:
@@ -477,7 +477,7 @@ class MVT(nn.Module):
         if self.add_lang:
             l = self.lang_preprocess(
                 lang_emb.view(bs * self.lang_max_seq_len, self.lang_emb_dim)
-            )
+            ) # torch.Size([7392, 128])
             l = l.view(bs, self.lang_max_seq_len, -1)
             num_lang_tok = l.shape[1]
             ins = torch.cat((l, ins), dim=1)  # [B, num_img * np * np + 77, 128]
@@ -486,8 +486,8 @@ class MVT(nn.Module):
         if not self.pe_fix:
             ins = ins + self.pos_encoding
 
-        x = self.fc_bef_attn(ins)
-        if self.self_cross_ver == 0:
+        x = self.fc_bef_attn(ins) 
+        if self.self_cross_ver == 0: # 只进行selfattn
             # self-attention layers
             for self_attn, self_ff in self.layers:
                 x = self_attn(x) + x
@@ -497,14 +497,15 @@ class MVT(nn.Module):
             lx, imgx = x[:, :num_lang_tok], x[:, num_lang_tok:]
 
             # within image self attention
-            imgx = imgx.reshape(bs * num_img, num_pat_img * num_pat_img, -1)
-            for self_attn, self_ff in self.layers[: len(self.layers) // 2]:
-                imgx = self_attn(imgx) + imgx
-                imgx = self_ff(imgx) + imgx
+            imgx = imgx.reshape(bs * num_img, num_pat_img * num_pat_img, -1) # torch.Size([96, 768, 512]) -> torch.Size([288, 256, 512])
+            for self_attn, self_ff in self.layers[: len(self.layers) // 2]: # 把视角放在第一个维度进行selfattn
+                imgx = self_attn(imgx) + imgx 
+                imgx = self_ff(imgx) + imgx # TODO: 出现nan
 
             imgx = imgx.view(bs, num_img * num_pat_img * num_pat_img, -1)
+            # print(torch.any(torch.isnan(imgx)))
             x = torch.cat((lx, imgx), dim=1)
-            # cross attention
+            # cross attention 把视角放在第二个维度进行crossattn
             for self_attn, self_ff in self.layers[len(self.layers) // 2 :]:
                 x = self_attn(x) + x
                 x = self_ff(x) + x
@@ -516,14 +517,14 @@ class MVT(nn.Module):
         if self.add_lang:
             # throwing away the language embeddings
             x = x[:, num_lang_tok:]
-        x = self.fc_aft_attn(x)
+        x = self.fc_aft_attn(x) # torch.Size([96, 768, 128])
 
         # reshape back to orginal size
         x = x.view(bs, *ins_orig_shape[1:-1], x.shape[-1])  # [B, num_img, np, np, 128]
-        x = rearrange(x, "b ... d -> b d ...")  # [B, 128, num_img, np, np]
+        x = rearrange(x, "b ... d -> b d ...")  # [B, 128, num_img, np, np] TODO: *why* all nan
 
         feat = []
-        _feat = torch.max(torch.max(x, dim=-1)[0], dim=-1)[0]
+        _feat = torch.max(torch.max(x, dim=-1)[0], dim=-1)[0] # torch.Size([96, 128, 3]) 找出每个通道的特征图中最大值
         _feat = _feat.view(bs, -1)
         feat.append(_feat)
 
@@ -533,9 +534,9 @@ class MVT(nn.Module):
             .view(
                 bs * self.num_img, self.input_dim_before_seq, num_pat_img, num_pat_img
             )
-        )
+        ) # torch.Size([288, 128, 16, 16])
         if self.cvx_up:
-            trans = self.up0(x)
+            trans = self.up0(x) # torch.Size([288, 1, 224, 224])
             trans = trans.view(bs, self.num_img, h, w)
         else:
             u0 = self.up0(x)
@@ -590,9 +591,9 @@ class MVT(nn.Module):
                 # projection
                 # (bs, 1, num_img, 2)
                 wpt_img = self.get_pt_loc_on_img(
-                    wpt_local.unsqueeze(1),
+                    wpt_local.unsqueeze(1), # torch.Size([96, 3])->torch.Size([96, 1, 3])
                     dyn_cam_info=None,
-                )
+                ) # torch.Size([96, 1, 3, 2])
                 wpt_img = wpt_img.reshape(bs * self.num_img, 2)
 
                 # add noise to wpt image while training
@@ -603,8 +604,8 @@ class MVT(nn.Module):
                     wpt_img = torch.clamp(wpt_img, 0, self.img_size - 1)
 
                 if self.cvx_up:
-                    _wpt_img = wpt_img / self.img_patch_size
-                    _u = x
+                    _wpt_img = wpt_img / self.img_patch_size # torch.Size([288, 2]) 搞了一个缩小，把wpt放到某个patch中
+                    _u = x # torch.Size([288, 128, 16, 16]) 
                     assert (
                         0 <= _wpt_img.min() and _wpt_img.max() <= x.shape[-1]
                     ), print(_wpt_img, x.shape)
@@ -612,27 +613,27 @@ class MVT(nn.Module):
                     _u = u
                     _wpt_img = wpt_img
 
-                _wpt_img = _wpt_img.unsqueeze(1)
-                _feat = select_feat_from_hm(_wpt_img, _u)[0]
-                _feat = _feat.view(bs, -1)
+                _wpt_img = _wpt_img.unsqueeze(1) # torch.Size([288, 1, 2])
+                _feat = select_feat_from_hm(_wpt_img, _u)[0] # torch.Size([288, 1, 128]) 128是特征维度
+                _feat = _feat.view(bs, -1) # 多视角特征拼接
 
             else:
                 assert False, NotImplementedError
 
             feat.append(_feat)
 
-            feat = torch.cat(feat, dim=-1)
+            feat = torch.cat(feat, dim=-1) # torch.Size([96, 768])
 
             if self.rot_ver == 0:
                 feat = self.feat_fc(feat)
                 out = {"feat": feat}
             elif self.rot_ver == 1:
                 # features except rotation
-                feat_ex_rot = self.feat_fc_ex_rot(feat)
+                feat_ex_rot = self.feat_fc_ex_rot(feat) # torch.Size([96, 4]) torch.Size([96, 4])除了旋转和平移，剩下的colli和gripper两个01，共4个维度
 
                 # batch normalized features for rotation
-                feat_rot = self.feat_fc_init_bn(feat)
-                feat_x = self.feat_fc_x(feat_rot)
+                feat_rot = self.feat_fc_init_bn(feat) # torch.Size([96, 768])
+                feat_x = self.feat_fc_x(feat_rot) # torch.Size([96, 72])
 
                 if self.training:
                     rot_x = rot_x_y[..., 0].view(bs, 1)
@@ -658,7 +659,7 @@ class MVT(nn.Module):
         else:
             out = {}
 
-        out.update({"trans": trans})
+        out.update({"trans": trans}) # 第一阶段只输出三个视角的heatmap
 
         return out
 

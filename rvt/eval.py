@@ -254,14 +254,24 @@ def eval(
 
     if logging:
         assert log_dir is not None
-
+        i = 0
+        while True:
+            csv_file = f"eval_results_{i}.csv"
+            if not os.path.exists(os.path.join(log_dir, csv_file)):
+                break
+            i += 1
+        
+        with open(os.path.join(log_dir, csv_file), "w") as csv_fp:
+            fieldnames = ["task", "success_rate", "length", "total_transitions"]
+            csv_writer = csv.DictWriter(csv_fp, fieldnames=fieldnames)
+            csv_writer.writeheader()
         # create metric saving writer
-        csv_file = "eval_results.csv"
-        if not os.path.exists(os.path.join(log_dir, csv_file)):
-            with open(os.path.join(log_dir, csv_file), "w") as csv_fp:
-                fieldnames = ["task", "success rate", "length", "total_transitions"]
-                csv_writer = csv.DictWriter(csv_fp, fieldnames=fieldnames)
-                csv_writer.writeheader()
+        # csv_file = "eval_results.csv"
+        # if not os.path.exists(os.path.join(log_dir, csv_file)):
+        #     with open(os.path.join(log_dir, csv_file), "w") as csv_fp:
+        #         fieldnames = ["task", "success rate", "length", "total_transitions"]
+        #         csv_writer = csv.DictWriter(csv_fp, fieldnames=fieldnames)
+        #         csv_writer.writeheader()
 
     # evaluate agent
     rollout_generator = RolloutGenerator(device)
@@ -320,12 +330,12 @@ def eval(
         if logging:
             # writer csv first
             with open(os.path.join(log_dir, csv_file), "a") as csv_fp:
-                fieldnames = ["task", "success rate", "length", "total_transitions"]
+                fieldnames = ["task", "success_rate", "length", "total_transitions"]
                 csv_writer = csv.DictWriter(csv_fp, fieldnames=fieldnames)
                 csv_results = {"task": task_name}
                 for s in summaries:
                     if s.name == "eval_envs/return":
-                        csv_results["success rate"] = s.value
+                        csv_results["success_rate"] = s.value
                     elif s.name == "eval_envs/length":
                         csv_results["length"] = s.value
                     elif s.name == "eval_envs/total_transitions":

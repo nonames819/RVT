@@ -101,7 +101,7 @@ class PointRenderer:
         # (these would be more elegant as class methods, but TorchScript doesn't support it)
         point_pixel_index, point_depths, features = _prep_render_batch_inputs(
             points, features, cameras.inv_poses, cameras.intrinsics, img_h, img_w, type(cameras) == OrthographicCameras)
-
+        #                    torch.Size([3, 4, 4]) torch.Size([3, 3, 3])
         # Allocate depth and image render buffers
         # Batch size is rolled in with the height dimension
         #  a.k.a. we render a single image that contains all images vertically stacked
@@ -113,11 +113,11 @@ class PointRenderer:
 
         # Render points to pixel buffers
         r.render_feature_pointcloud_to_image(
-            point_pixel_index,
-            point_depths,
-            features,
-            image_buf,
-            depth_buf,
+            point_pixel_index, # (torch.Size([130452]))
+            point_depths, # (torch.Size([130452]))
+            features, # torch.Size([43484, 6])
+            image_buf, # torch.Size([672, 224, 6])
+            depth_buf, # torch.Size([672, 224])
             default_depth,
             default_color
         )

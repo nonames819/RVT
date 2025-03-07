@@ -81,7 +81,7 @@ class MVT(nn.Module):
         if self.use_point_renderer:
             from point_renderer.rvt_renderer import RVTBoxRenderer as BoxRenderer
         else:
-            from mvt.renderer import BoxRenderer
+            from mvt.renderer import BoxRenderer # pytorch3d
         global BoxRenderer
 
         # creating a dictonary of all the input parameters
@@ -122,7 +122,7 @@ class MVT(nn.Module):
             with_depth=add_depth,
         )
         self.num_img = self.renderer.num_img
-        self.proprio_dim = proprio_dim
+        self.proprio_dim = proprio_dim # TODO: why 4?
         self.img_size = img_size
 
         self.mvt1 = MVTSingle(
@@ -136,13 +136,13 @@ class MVT(nn.Module):
     def get_pt_loc_on_img(self, pt, mvt1_or_mvt2, dyn_cam_info, out=None):
         """
         :param pt: point for which location on image is to be found. the point
-            shoud be in the same reference frame as wpt_local (see forward()),
+            should be in the same reference frame as wpt_local (see forward()),
             even for mvt2
         :param out: output from mvt, when using mvt2, we also need to provide the
             origin location where where the point cloud needs to be shifted
             before estimating the location in the image
         """
-        assert len(pt.shape) == 3
+        assert len(pt.shape) == 3 # TODO: understand
         bs, _np, x = pt.shape
         assert x == 3
 
@@ -182,7 +182,7 @@ class MVT(nn.Module):
 
     def render(self, pc, img_feat, img_aug, mvt1_or_mvt2, dyn_cam_info):
         assert isinstance(mvt1_or_mvt2, bool)
-        if mvt1_or_mvt2:
+        if mvt1_or_mvt2: # TODO: 有什么区别
             mvt = self.mvt1
         else:
             mvt = self.mvt2
@@ -201,7 +201,7 @@ class MVT(nn.Module):
                             pc, img_feat, dyn_cam_info_itr
                         ):
                             # fix when the pc is empty
-                            max_pc = 1.0 if len(_pc) == 0 else torch.max(torch.abs(_pc))
+                            max_pc = 1.0 if len(_pc) == 0 else torch.max(torch.abs(_pc)) # 防止点云为空除以0
                             img.append(
                                 self.renderer(
                                     _pc,
@@ -226,7 +226,7 @@ class MVT(nn.Module):
                                 pc, img_feat, dyn_cam_info_itr
                             )
                         ]
-                else:
+                else: # mvt.add_corr = False 不使用pc与img_feat连接输入
                     img = [
                         self.renderer(
                             _pc,
@@ -242,7 +242,7 @@ class MVT(nn.Module):
                     ]
 
         img = torch.cat(img, 0)
-        img = img.permute(0, 1, 4, 2, 3)
+        img = img.permute(0, 1, 4, 2, 3) # torch.Size([96, 3, 7, 224, 224])
 
         # for visualization purposes
         if mvt.add_corr:
@@ -262,7 +262,7 @@ class MVT(nn.Module):
             pixel_loc = mvt.pixel_loc.to(img.device)
             img = torch.cat(
                 (img, pixel_loc.unsqueeze(0).repeat(bs, 1, 1, 1, 1)), dim=2
-            )
+            ) # torch.Size([96, 3, 10, 224, 224])
 
         return img
 
@@ -369,7 +369,7 @@ class MVT(nn.Module):
             img_aug=img_aug,
             wpt_local=wpt_local,
             rot_x_y=rot_x_y,
-        )
+        ) # 检查
         with torch.no_grad():
             if self.training and (self.img_aug_2 != 0):
                 for x in img_feat:
@@ -383,7 +383,7 @@ class MVT(nn.Module):
                 img_aug=img_aug,
                 mvt1_or_mvt2=True,
                 dyn_cam_info=None,
-            )
+            ) # 只是跳进去用mvt_single的renderer, 返回torch.Size([96, 3, 10, 224, 224]) 10 = rgb+depth+xyz+loc
 
         if self.training:
             wpt_local_stage_one = wpt_local
@@ -405,7 +405,7 @@ class MVT(nn.Module):
                 # adding then noisy location for training
                 if self.training:
                     # noise is added so that the wpt_local2 is not exactly at
-                    # the center of the pc
+                    # the center of the pc TODO: coarse2fine的过程是怎么确定区域的？
                     wpt_local_stage_one_noisy = mvt_utils.add_uni_noi(
                         wpt_local_stage_one.clone().detach(), 2 * self.st_wpt_loc_aug
                     )
@@ -441,15 +441,15 @@ class MVT(nn.Module):
                     pc=pc,
                     img_feat=img_feat,
                     img_aug=img_aug,
-                    mvt1_or_mvt2=False,
+                    mvt1_or_mvt2=False, # 相比第一阶段只改了这个
                     dyn_cam_info=None,
-                )
+                ) # torch.Size([96, 3, 10, 224, 224])
 
             out_mvt2 = self.mvt2(
                 img=img,
                 proprio=proprio,
                 lang_emb=lang_emb,
-                wpt_local=wpt_local2,
+                wpt_local=wpt_local2, # 这里应该修改了
                 rot_x_y=rot_x_y,
                 **kwargs,
             )

@@ -113,7 +113,12 @@ def get_tasks(exp_cfg):
 
 
 def get_logdir(cmd_args, exp_cfg):
-    log_dir = os.path.join(cmd_args.log_dir, exp_cfg.exp_id)
+    from datetime import datetime
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if cmd_args.debug:
+        log_dir = os.path.join(cmd_args.log_dir, "debug", exp_cfg.exp_id, current_time)
+    else:
+        log_dir = os.path.join(cmd_args.log_dir, exp_cfg.exp_id, current_time)
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
@@ -144,9 +149,9 @@ def experiment(rank, cmd_args, devices, port):
     ddp = len(devices) > 1
     ddp_utils.setup(rank, world_size=len(devices), port=port)
 
-    exp_cfg = exp_cfg_mod.get_cfg_defaults()
+    exp_cfg = exp_cfg_mod.get_cfg_defaults() # rvt/config.py的内容
     if cmd_args.exp_cfg_path != "":
-        exp_cfg.merge_from_file(cmd_args.exp_cfg_path)
+        exp_cfg.merge_from_file(cmd_args.exp_cfg_path) # 合并rvt/configs/rvt2.yaml
     if cmd_args.exp_cfg_opts != "":
         exp_cfg.merge_from_list(cmd_args.exp_cfg_opts.split(" "))
 
@@ -173,7 +178,7 @@ def experiment(rank, cmd_args, devices, port):
     TRAINING_ITERATIONS = int(exp_cfg.train_iter // (exp_cfg.bs * len(devices)))
     EPOCHS = exp_cfg.epochs
     TRAIN_REPLAY_STORAGE_DIR = "replay/replay_train"
-    TEST_REPLAY_STORAGE_DIR = "replay/replay_val"
+    TEST_REPLAY_STORAGE_DIR = "replay/replay_val_down"
     log_dir = get_logdir(cmd_args, exp_cfg)
     tasks = get_tasks(exp_cfg)
     print("Training on {} tasks: {}".format(len(tasks), tasks))
@@ -208,7 +213,7 @@ def experiment(rank, cmd_args, devices, port):
         mvt_cfg.feat_dim = get_num_feat(exp_cfg.peract)
         mvt_cfg.freeze()
 
-        # for maintaining backward compatibility
+        # for maintaining backward compatibility 旋转360度分72个bin
         assert mvt_cfg.num_rot == exp_cfg.peract.num_rotation_classes, print(
             mvt_cfg.num_rot, exp_cfg.peract.num_rotation_classes
         )
@@ -290,8 +295,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--refresh_replay", action="store_true", default=False)
     parser.add_argument("--device", type=str, default="0")
-    parser.add_argument("--mvt_cfg_path", type=str, default="")
-    parser.add_argument("--exp_cfg_path", type=str, default="")
+    parser.add_argument("--mvt_cfg_path", type=str, default="mvt/configs/rvt2.yaml")
+    parser.add_argument("--exp_cfg_path", type=str, default="configs/rvt2.yaml")
+    parser.add_argument("--debug", action="store_true", default=False)
 
     parser.add_argument("--mvt_cfg_opts", type=str, default="")
     parser.add_argument("--exp_cfg_opts", type=str, default="")
@@ -304,6 +310,8 @@ if __name__ == "__main__":
         cmd_args.entry
     )  # hack for multi processing -- removes an argument called entry which is not picklable
 
+    # num_gpus = torch.cuda.device_count()
+    # devices = [int(x) for x in range(num_gpus)]
     devices = cmd_args.device.split(",")
     devices = [int(x) for x in devices]
 

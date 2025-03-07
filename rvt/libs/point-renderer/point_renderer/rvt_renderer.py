@@ -93,7 +93,7 @@ class RVTBoxRenderer():
             "back": {"eye": [-1, 0, 0], "at": [0, 0, 0], "up": [0, 0, 1]},
             "left": {"eye": [0, -1, 0], "at": [0, 0, 0], "up": [0, 0, 1]},
             "right": {"eye": [0, 0.5, 0], "at": [0, 0, 0], "up": [0, 0, 1]},
-        }
+        } # 初始化围绕原点2*2*2的空间，所以摄像头设置在坐标轴上
 
         assert not (two_views and three_views)
         assert not (one_view and three_views)
@@ -138,14 +138,14 @@ class RVTBoxRenderer():
     def get_pt_loc_on_img(self, pt, fix_cam=False, dyn_cam_info=None):
         """
         returns the location of a point on the image of the cameras
-        :param pt: torch.Tensor of shape (bs, np, 3)
+        :param pt: torch.Tensor of shape (bs, np, 3) 点云
         :returns: the location of the pt on the image. this is different from the
             camera screen coordinate system in pytorch3d. the difference is that
             pytorch3d camera screen projects the point to [0, 0] to [H, W]; while the
             index on the img is from [0, 0] to [H-1, W-1]. We verified that
             the to transform from pytorch3d camera screen point to img we have to
             subtract (1/H, 1/W) from the pytorch3d camera screen coordinate.
-        :return type: torch.Tensor of shape (bs, np, self.num_img, 2)
+        :return type: torch.Tensor of shape (bs, np, self.num_img, 2) 摄像头数量的2D image
         """
         assert len(pt.shape) == 3
         assert pt.shape[-1] == 3
@@ -188,7 +188,7 @@ class RVTBoxRenderer():
             res = self.img_size[0]
             pts = torch.linspace(-1 + (1 / res), 1 - (1 / res), res).to(hm.device)
             pts = torch.cartesian_prod(pts, pts, pts)
-            self._pts = pts
+            self._pts = pts # 缓存
 
         pts_hm = []
 
@@ -201,7 +201,7 @@ class RVTBoxRenderer():
             # (nc, np, bs)
             fix_pts_hm, pts_cam, pts_cam_wei = rvt_ops.select_feat_from_hm(
                 pts_img.transpose(0, 1), hm.transpose(0, 1)[0 : len(self.cameras)]
-            )
+            ) # TODO: Calculation of the heatmaps (chd)
             self._fix_pts_img = pts_img
             self._fix_pts_cam = pts_cam
             self._fix_pts_cam_wei = pts_cam_wei
@@ -275,7 +275,7 @@ class RVTBoxRenderer():
                                     default_color=self.default_color,
                                     default_depth=self.default_depth,
                                     aa_factor=self.aa_factor
-                                    )
+                                    ) # 返回的是0，仅仅初始化一下shape？
 
         if self.normalize_output:
             _, h, w = pc_depths.shape

@@ -7,6 +7,7 @@ rvt/data/train/
 rvt/data/val/
 rvt/data/test/
 rvt/replay/
+rvt/libs/
 coppelia_install_dir/
 rvt/runs/
 runs_ngc_mnt

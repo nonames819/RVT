@@ -28,13 +28,13 @@ def get_pc_img_feat(obs, pcd, bounds=None):
     bs = obs[0][0].shape[0]
     # concatenating the points from all the cameras
     # (bs, num_points, 3)
-    pc = torch.cat([p.permute(0, 2, 3, 1).reshape(bs, -1, 3) for p in pcd], 1)
+    pc = torch.cat([p.permute(0, 2, 3, 1).reshape(bs, -1, 3) for p in pcd], 1) # 点云打散
     _img_feat = [o[0] for o in obs]
     img_dim = _img_feat[0].shape[1]
     # (bs, num_points, 3)
     img_feat = torch.cat(
         [p.permute(0, 2, 3, 1).reshape(bs, -1, img_dim) for p in _img_feat], 1
-    )
+    ) # img_feat和pc经历了类似的操作，都被flatten成了一维的点列
 
     img_feat = (img_feat + 1) / 2
 
@@ -227,6 +227,9 @@ def get_eval_parser():
 
     return parser
 
+# RLBENCH_TASKS = [
+#     "open_drawer",
+# ]
 
 RLBENCH_TASKS = [
     "put_item_in_drawer",

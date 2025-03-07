@@ -475,7 +475,7 @@ class RVTAgent:
         :param only_pred: some speedupds if the q values are meant only for
             prediction
         :return: tuple of trans_q, rot_q, grip_q and coll_q that is used for
-            training and preduction
+            training and prediction
         """
         bs, nc, h, w = dims
         assert isinstance(only_pred, bool)
@@ -511,7 +511,7 @@ class RVTAgent:
             ]
         elif self.rot_ver == 1:
             rot_q = torch.cat((out["feat_x"], out["feat_y"], out["feat_z"]),
-                              dim=-1).view(bs, -1)
+                              dim=-1).view(bs, -1) # torch.Size([96, 216]) (72*3)
             grip_q = out["feat_ex_rot"].view(bs, -1)[:, :2]
             collision_q = out["feat_ex_rot"].view(bs, -1)[:, 2:]
         else:
@@ -529,16 +529,16 @@ class RVTAgent:
         eval_log: bool = False,
         reset_log: bool = False,
     ) -> dict:
-        assert replay_sample["rot_grip_action_indicies"].shape[1:] == (1, 4)
+        assert replay_sample["rot_grip_action_indicies"].shape[1:] == (1, 4) # TODO: meaning?
         assert replay_sample["ignore_collisions"].shape[1:] == (1, 1)
-        assert replay_sample["gripper_pose"].shape[1:] == (1, 7)
+        assert replay_sample["gripper_pose"].shape[1:] == (1, 7) # 3维坐标 + xyzw 4元数表示
         assert replay_sample["lang_goal_embs"].shape[1:] == (1, 77, 512)
         assert replay_sample["low_dim_state"].shape[1:] == (
             1,
             self._net_mod.proprio_dim,
         )
 
-        # sample
+        # sample 数据准备
         action_rot_grip = replay_sample["rot_grip_action_indicies"][
             :, -1
         ].int()  # (b, 4) of int
@@ -553,18 +553,18 @@ class RVTAgent:
         lang_goal_embs = replay_sample["lang_goal_embs"][:, -1].float()
         tasks = replay_sample["tasks"]
 
-        proprio = arm_utils.stack_on_channel(replay_sample["low_dim_state"])  # (b, 4)
+        proprio = arm_utils.stack_on_channel(replay_sample["low_dim_state"])  # (b, 4) 由于dim=1上size=1其实没变
         return_out = {}
 
-        obs, pcd = peract_utils._preprocess_inputs(replay_sample, self.cameras)
+        obs, pcd = peract_utils._preprocess_inputs(replay_sample, self.cameras) # obs包含rgb图和pcd
 
         with torch.no_grad():
             pc, img_feat = rvt_utils.get_pc_img_feat(
                 obs,
                 pcd,
-            )
-
-            if self._transform_augmentation and backprop:
+            ) # 俩都是torch.Size([96, 65536, 3]) 4个视角的点云位置和rgb信息集合
+            # 数据增强
+            if self._transform_augmentation and backprop: # data augmentation
                 action_trans_con, action_rot, pc = apply_se3_aug_con(
                     pcd=pc,
                     action_gripper_pose=action_gripper_pose,
@@ -572,9 +572,9 @@ class RVTAgent:
                     trans_aug_range=torch.tensor(self._transform_augmentation_xyz),
                     rot_aug_range=torch.tensor(self._transform_augmentation_rpy),
                 )
-                action_trans_con = torch.tensor(action_trans_con).to(pc.device)
-                action_rot = torch.tensor(action_rot).to(pc.device)
-
+                action_trans_con = torch.tensor(action_trans_con).to(pc.device) # (b, 3)
+                action_rot = torch.tensor(action_rot).to(pc.device) # (b, 4)
+            # 数据筛选
             # TODO: vectorize
             action_rot = action_rot.cpu().numpy()
             for i, _action_rot in enumerate(action_rot):
@@ -585,9 +585,9 @@ class RVTAgent:
 
             pc, img_feat = rvt_utils.move_pc_in_bound(
                 pc, img_feat, self.scene_bounds, no_op=not self.move_pc_in_bound
-            )
-            wpt = [x[:3] for x in action_trans_con]
-
+            ) # 过滤掉不在bound范围内的点，变成list
+            wpt = [x[:3] for x in action_trans_con] # tensor2list
+            # 数据标准化
             wpt_local = []
             rev_trans = []
             for _pc, _wpt in zip(pc, wpt):
@@ -596,9 +596,9 @@ class RVTAgent:
                     _wpt,
                     with_mean_or_bounds=self._place_with_mean,
                     scene_bounds=None if self._place_with_mean else self.scene_bounds,
-                )
+                ) # a将wpt根据bound范围转到标准化3d cube空间中， b是转化回去的函数, pc仅仅传进去算bound
                 wpt_local.append(a.unsqueeze(0))
-                rev_trans.append(b)
+                rev_trans.append(b) 
 
             wpt_local = torch.cat(wpt_local, axis=0)
 
@@ -610,10 +610,10 @@ class RVTAgent:
                     scene_bounds=None if self._place_with_mean else self.scene_bounds,
                 )[0]
                 for _pc in pc
-            ]
+            ] # 和上面一样，将所有batch的点云根据bound范围转到标准化3d cube空间中
 
             bs = len(pc)
-            nc = self._net_mod.num_img
+            nc = self._net_mod.num_img # 这里应该是目标图片数量？
             h = w = self._net_mod.img_size
 
             if backprop and (self.img_aug != 0):
@@ -625,14 +625,14 @@ class RVTAgent:
 
         with autocast(enabled=self.amp):
             (
-                action_rot_x_one_hot,
+                action_rot_x_one_hot, # (bs,num_bins=72)
                 action_rot_y_one_hot,
                 action_rot_z_one_hot,
                 action_grip_one_hot,  # (bs, 2)
                 action_collision_one_hot,  # (bs, 2)
             ) = self._get_one_hot_expert_actions(
                 bs, action_rot, action_grip, action_ignore_collisions, device=self._device
-            )
+            ) # rot分bin，其他二值01
 
             if self.rot_ver == 1:
                 rot_x_y = torch.cat(
@@ -641,19 +641,19 @@ class RVTAgent:
                         action_rot_y_one_hot.argmax(dim=-1, keepdim=True),
                     ],
                     dim=-1,
-                )
+                ) # 下标拼接
                 if self.rot_x_y_aug != 0:
                     # add random interger between -rot_x_y_aug and rot_x_y_aug to rot_x_y
                     rot_x_y += torch.randint(
                         -self.rot_x_y_aug, self.rot_x_y_aug, size=rot_x_y.shape
-                    ).to(rot_x_y.device)
-                    rot_x_y %= self._num_rotation_classes
+                    ).to(rot_x_y.device) 
+                    rot_x_y %= self._num_rotation_classes # 旋转增强，防止越界,paper里也确实只对z-axis做了增强
 
             out = self._network(
-                pc=pc,
-                img_feat=img_feat,
-                proprio=proprio,
-                lang_emb=lang_goal_embs,
+                pc=pc, # len为bs的pc集合
+                img_feat=img_feat, # 与上面对应
+                proprio=proprio, # (bs, 4)
+                lang_emb=lang_goal_embs, 
                 img_aug=img_aug,
                 wpt_local=wpt_local if self._network.training else None,
                 rot_x_y=rot_x_y if self.rot_ver == 1 else None,
@@ -665,7 +665,7 @@ class RVTAgent:
 
             action_trans = self.get_action_trans(
                 wpt_local, pts, out, dyn_cam_info, dims=(bs, nc, h, w)
-            )
+            ) # torch.Size([96, 50176, 6]) 224*224 
 
         loss_log = {}
         if backprop:

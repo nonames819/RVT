@@ -77,13 +77,13 @@ class ConvexUpSample(nn.Module):
 
         mask = self.mask_scale * self.net_mask(x)
         mask = mask.view(bs, 1, self.up_kernel**2, self.up_ratio, self.up_ratio, h, w)
-        mask = torch.softmax(mask, dim=2)
+        mask = torch.softmax(mask, dim=2) # 分几个核计算上采样结果，然后用softmax加权
 
         out = F.unfold(
-            out_low,
+            out_low, # torch.Size([288, 1, 16, 16])
             kernel_size=[self.up_kernel, self.up_kernel],
             padding=self.up_kernel // 2,
-        )
+        ) # torch.Size([288, 9, 256]) 通道加深，并且flatten
         out = out.view(bs, self.out_dim, self.up_kernel**2, 1, 1, h, w)
 
         out = torch.sum(out * mask, dim=2)
