@@ -383,7 +383,7 @@ class MVT(nn.Module):
                 img_aug=img_aug,
                 mvt1_or_mvt2=True,
                 dyn_cam_info=None,
-            ) # 只是跳进去用mvt_single的renderer, 返回torch.Size([96, 3, 10, 224, 224]) 10 = rgb+depth+xyz+loc
+            ) # 只是跳进去用mvt_single的renderer, 返回torch.Size([96, 3, 10, 224, 224]) 10 = rgb+depth+xyz+loc，loc指的是（视角+视角内相对位置）的编码 这个长度为10的特征在第一个mvt_single似乎都是被绑定着使用的
 
         if self.training:
             wpt_local_stage_one = wpt_local
@@ -398,14 +398,14 @@ class MVT(nn.Module):
             wpt_local=wpt_local_stage_one,
             rot_x_y=rot_x_y,
             **kwargs,
-        )
+        ) # 返回heatmap torch.Size([1, 3, 224, 224]) TODO：是吗
 
         if self.stage_two:
             with torch.no_grad():
                 # adding then noisy location for training
                 if self.training:
                     # noise is added so that the wpt_local2 is not exactly at
-                    # the center of the pc TODO: coarse2fine的过程是怎么确定区域的？
+                    # the center of the pc TODO: coarse2fine的过程是怎么确定区域的？热力图是怎么用的？
                     wpt_local_stage_one_noisy = mvt_utils.add_uni_noi(
                         wpt_local_stage_one.clone().detach(), 2 * self.st_wpt_loc_aug
                     )
@@ -423,14 +423,14 @@ class MVT(nn.Module):
                         )
 
                 else:
-                    # bs, 3
+                    # bs, 3 根据前面的到的特征图计算热力图然后再选取出得分最高的点，获取其空间坐标
                     wpt_local = self.get_wpt(
                         out, y_q=None, mvt1_or_mvt2=True,
                         dyn_cam_info=None,
                     )
                     pc, rev_trans = mvt_utils.trans_pc(
                         pc, loc=wpt_local, sca=self.st_sca
-                    )
+                    ) # 转化到以loc为中心，sca为缩放的坐标系
                     # bad name!
                     wpt_local_stage_one_noisy = wpt_local
 

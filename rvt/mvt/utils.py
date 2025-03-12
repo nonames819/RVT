@@ -85,7 +85,7 @@ def trans_pc(pc, loc, sca):
     assert loc.shape[-1] == 3
     if isinstance(pc, list):
         assert all([(len(x.shape) == 2) and (x.shape[1] == 3) for x in pc])
-        pc = [sca * (x - y) for x, y in zip(pc, loc)]
+        pc = [sca * (x - y) for x, y in zip(pc, loc)] # 转化到以loc为中心，sca为缩放的坐标系
     elif isinstance(pc, torch.Tensor):
         assert len(pc.shape) in [2, 3]
         assert pc.shape[-1] == 3

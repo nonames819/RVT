@@ -775,7 +775,7 @@ class RVTAgent:
         if self.add_lang:
             lang_goal_tokens = observation.get("lang_goal_tokens", None).long()
             _, lang_goal_embs = _clip_encode_text(self.clip_model, lang_goal_tokens[0])
-            lang_goal_embs = lang_goal_embs.float()
+            lang_goal_embs = lang_goal_embs.float() # torch.Size([1, 77, 512])
         else:
             lang_goal_embs = (
                 torch.zeros(observation["lang_goal_embs"].shape)
@@ -787,13 +787,13 @@ class RVTAgent:
 
         obs, pcd = peract_utils._preprocess_inputs(observation, self.cameras)
         pc, img_feat = rvt_utils.get_pc_img_feat(
-            obs,
-            pcd,
-        )
+            obs, # 4x2个torch.Size([1, 3, 128, 128])
+            pcd, # 4个torch.Size([1, 3, 128, 128])
+        ) # torch.Size([1, 65536, 3]) torch.Size([1, 65536, 3])
 
         pc, img_feat = rvt_utils.move_pc_in_bound(
             pc, img_feat, self.scene_bounds, no_op=not self.move_pc_in_bound
-        )
+        ) # 筛选torch.Size([46734, 3])
 
         # TODO: Vectorize
         pc_new = []
@@ -805,7 +805,7 @@ class RVTAgent:
                 scene_bounds=None if self._place_with_mean else self.scene_bounds,
             )
             pc_new.append(a)
-            rev_trans.append(b)
+            rev_trans.append(b) # 把点云坐标转到标准化3d cube空间中
         pc = pc_new
 
         bs = len(pc)
@@ -822,10 +822,10 @@ class RVTAgent:
         )
         _, rot_q, grip_q, collision_q, y_q, _ = self.get_q(
             out, dims=(bs, nc, h, w), only_pred=True, get_q_trans=False
-        )
+        ) # 输出预测的中间结果（比如rot分bin，grip和collision二值化）
         pred_wpt, pred_rot_quat, pred_grip, pred_coll = self.get_pred(
             out, rot_q, grip_q, collision_q, y_q, rev_trans, dyn_cam_info
-        )
+        ) # 将中间结果转化为最终结果，包括位置、旋转、grip和collision
 
         continuous_action = np.concatenate(
             (
@@ -834,8 +834,8 @@ class RVTAgent:
                 pred_grip[0].cpu().numpy(),
                 pred_coll[0].cpu().numpy(),
             )
-        )
-        if pred_distri:
+        ) # len = 9， 位置3维，旋转4维，grip和collision各1维
+        if pred_distri: # 如果需要返回分布
             x_distri = rot_grip_q[
                 0,
                 0 * self._num_rotation_classes : 1 * self._num_rotation_classes,

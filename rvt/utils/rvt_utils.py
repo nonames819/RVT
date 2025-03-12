@@ -78,7 +78,7 @@ def move_pc_in_bound(pc, img_feat, bounds, no_op=False):
     # TODO: move from a list to a better batched version
     pc = [pc[i, ~_inv_pnt] for i, _inv_pnt in enumerate(inv_pnt)]
     img_feat = [img_feat[i, ~_inv_pnt] for i, _inv_pnt in enumerate(inv_pnt)]
-    return pc, img_feat
+    return pc, img_feat # 就是根据点云位置筛选了一下特征
 
 
 def count_parameters(model):
@@ -224,6 +224,7 @@ def get_eval_parser():
     parser.add_argument("--use-input-place-with-mean", action="store_true")
     parser.add_argument("--save-video", action="store_true")
     parser.add_argument("--skip", action="store_true")
+    parser.add_argument("--loops", type=int, default=1)
 
     return parser
 

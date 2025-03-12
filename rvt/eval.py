@@ -216,7 +216,7 @@ def eval(
 
     gripper_mode = Discrete()
     arm_action_mode = EndEffectorPoseViaPlanning()
-    action_mode = MoveArmThenGripper(arm_action_mode, gripper_mode)
+    action_mode = MoveArmThenGripper(arm_action_mode, gripper_mode) # 初始化仿真环境中的一些设置
 
     task_files = [
         t.replace(".py", "")
@@ -233,7 +233,7 @@ def eval(
     for task in tasks:
         if task not in task_files:
             raise ValueError("Task %s not recognised!." % task)
-        task_classes.append(task_file_to_task_class(task))
+        task_classes.append(task_file_to_task_class(task)) # 检查一下是不是rlbench支持的任务
 
     eval_env = CustomMultiTaskRLBenchEnv(
         task_classes=task_classes,
@@ -302,17 +302,17 @@ def eval(
             )
             try:
                 for replay_transition in generator:
-                    episode_rollout.append(replay_transition)
+                    episode_rollout.append(replay_transition) # 这里len=13？25/2？
             except StopIteration as e:
                 continue
             except Exception as e:
                 eval_env.shutdown()
                 raise e
-
+            # 其实这里通过和仿真环境的交互就直接保留了完整的replay信息，整理一下就可以得到任务的完成结果了
             for transition in episode_rollout:
                 stats_accumulator.step(transition, True)
                 current_task_id = transition.info["active_task_id"]
-                assert current_task_id == task_id
+                assert current_task_id == task_id 
 
             task_name = tasks[task_id]
             reward = episode_rollout[-1].reward
@@ -435,113 +435,113 @@ def get_model_index(filename):
 
 
 def _eval(args):
-
-    model_paths = []
-    if not (args.peract_official):
-        assert args.model_name is not None
-        model_paths.append(os.path.join(args.model_folder, args.model_name))
-    else:
-        model_paths.append(None)
-
-    # skipping evaluated models
-    if args.skip:
-        """
-        to_skip: {
-            0: {'light_bulb_in': False, .....}
-            1: {'light_bulb_in': False, .....}
-            .
-            .
-        }
-        """
-        to_skip = {
-            get_model_index(x): {y: False for y in args.tasks} for x in model_paths
-        }
-
-        filenames = os.listdir(args.eval_log_dir)
-        for filename in filenames:
-            if not filename.startswith("events.out.tfevents."):
-                continue
-            summ = summary_iterator(f"{args.eval_log_dir}/{filename}")
-            # skipping the time log of the summary
-            try:
-                next(summ)
-            except:
-                # moving to the next file
-                continue
-            for cur_summ in summ:
-                cur_task = cur_summ.summary.value[0].tag[5:]
-                cur_step = cur_summ.step
-                if cur_step in to_skip:
-                    to_skip[cur_step][cur_task] = True
-
-    tb = TensorboardManager(args.eval_log_dir)
-    for model_path in model_paths:
-        tasks_to_eval = deepcopy(args.tasks)
-
-        if args.peract_official:
-            model_idx = 0
-        else:
-            model_idx = get_model_index(model_path)
-            if model_idx is None:
-                model_idx = 0
-
-        if args.skip:
-            for _task in args.tasks:
-                if to_skip[model_idx][_task]:
-                    tasks_to_eval.remove(_task)
-
-            if len(tasks_to_eval) == 0:
-                print(f"Skipping model_idx={model_idx} for args.tasks={args.tasks}")
-                continue
-
+    for idx in range(args.loops):
+        model_paths = []
         if not (args.peract_official):
-            agent = load_agent(
-                model_path=model_path,
-                exp_cfg_path=args.exp_cfg_path,
-                mvt_cfg_path=args.mvt_cfg_path,
-                eval_log_dir=args.eval_log_dir,
-                device=args.device,
-                use_input_place_with_mean=args.use_input_place_with_mean,
-            )
-
-            agent_eval_log_dir = os.path.join(
-                args.eval_log_dir, os.path.basename(model_path).split(".")[0]
-            )
+            assert args.model_name is not None
+            model_paths.append(os.path.join(args.model_folder, args.model_name))
         else:
-            agent = load_agent(
-                peract_official=args.peract_official,
-                peract_model_dir=args.peract_model_dir,
+            model_paths.append(None)
+
+        # skipping evaluated models
+        if args.skip:
+            """
+            to_skip: {
+                0: {'light_bulb_in': False, .....}
+                1: {'light_bulb_in': False, .....}
+                .
+                .
+            }
+            """
+            to_skip = {
+                get_model_index(x): {y: False for y in args.tasks} for x in model_paths
+            }
+
+            filenames = os.listdir(args.eval_log_dir)
+            for filename in filenames:
+                if not filename.startswith("events.out.tfevents."):
+                    continue
+                summ = summary_iterator(f"{args.eval_log_dir}/{filename}")
+                # skipping the time log of the summary
+                try:
+                    next(summ)
+                except:
+                    # moving to the next file
+                    continue
+                for cur_summ in summ:
+                    cur_task = cur_summ.summary.value[0].tag[5:]
+                    cur_step = cur_summ.step
+                    if cur_step in to_skip:
+                        to_skip[cur_step][cur_task] = True
+
+        tb = TensorboardManager(args.eval_log_dir)
+        for model_path in model_paths:
+            tasks_to_eval = deepcopy(args.tasks)
+
+            if args.peract_official:
+                model_idx = 0
+            else:
+                model_idx = get_model_index(model_path)
+                if model_idx is None:
+                    model_idx = 0
+
+            if args.skip:
+                for _task in args.tasks:
+                    if to_skip[model_idx][_task]:
+                        tasks_to_eval.remove(_task)
+
+                if len(tasks_to_eval) == 0:
+                    print(f"Skipping model_idx={model_idx} for args.tasks={args.tasks}")
+                    continue
+
+            if not (args.peract_official):
+                agent = load_agent(
+                    model_path=model_path,
+                    exp_cfg_path=args.exp_cfg_path,
+                    mvt_cfg_path=args.mvt_cfg_path,
+                    eval_log_dir=args.eval_log_dir,
+                    device=args.device,
+                    use_input_place_with_mean=args.use_input_place_with_mean,
+                )
+
+                agent_eval_log_dir = os.path.join(
+                    args.eval_log_dir, os.path.basename(model_path).split(".")[0]
+                )
+            else:
+                agent = load_agent(
+                    peract_official=args.peract_official,
+                    peract_model_dir=args.peract_model_dir,
+                    device=args.device,
+                    use_input_place_with_mean=args.use_input_place_with_mean,
+                )
+                agent_eval_log_dir = os.path.join(args.eval_log_dir, "final")
+
+            os.makedirs(agent_eval_log_dir, exist_ok=True)
+            scores = eval(
+                agent=agent,
+                tasks=tasks_to_eval,
+                eval_datafolder=args.eval_datafolder,
+                start_episode=args.start_episode,
+                eval_episodes=args.eval_episodes,
+                episode_length=args.episode_length,
+                replay_ground_truth=args.ground_truth,
                 device=args.device,
-                use_input_place_with_mean=args.use_input_place_with_mean,
+                headless=args.headless,
+                logging=True,
+                log_dir=agent_eval_log_dir,
+                verbose=True,
+                save_video=args.save_video,
             )
-            agent_eval_log_dir = os.path.join(args.eval_log_dir, "final")
+            print(f"model {model_path}, scores {scores}")
+            task_scores = {}
+            for i in range(len(tasks_to_eval)):
+                task_scores[tasks_to_eval[i]] = scores[i]
 
-        os.makedirs(agent_eval_log_dir, exist_ok=True)
-        scores = eval(
-            agent=agent,
-            tasks=tasks_to_eval,
-            eval_datafolder=args.eval_datafolder,
-            start_episode=args.start_episode,
-            eval_episodes=args.eval_episodes,
-            episode_length=args.episode_length,
-            replay_ground_truth=args.ground_truth,
-            device=args.device,
-            headless=args.headless,
-            logging=True,
-            log_dir=agent_eval_log_dir,
-            verbose=True,
-            save_video=args.save_video,
-        )
-        print(f"model {model_path}, scores {scores}")
-        task_scores = {}
-        for i in range(len(tasks_to_eval)):
-            task_scores[tasks_to_eval[i]] = scores[i]
+            print("save ", task_scores)
+            tb.update("eval", model_idx, task_scores)
+            tb.writer.flush()
 
-        print("save ", task_scores)
-        tb.update("eval", model_idx, task_scores)
-        tb.writer.flush()
-
-    tb.close()
+        tb.close()
 
 
 if __name__ == "__main__":

@@ -71,7 +71,7 @@ def get_batch_pixel_index(pc_px : torch.Tensor, img_height : int, img_width : in
     pix_off = 0.0
     row_idx = (pc_px[:, :, 1] + pix_off).long()
     col_idx = (pc_px[:, :, 0] + pix_off).long()
-    pixel_index = batch_idx * img_height * img_width + row_idx * img_width + col_idx
+    pixel_index = batch_idx * img_height * img_width + row_idx * img_width + col_idx # cuda:1 RuntimeError: CUDA error: device-side assert triggered
     return pixel_index
 
 def get_pixel_index(pc_px : torch.Tensor, img_width : int):

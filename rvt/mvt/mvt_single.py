@@ -425,7 +425,7 @@ class MVT(nn.Module):
         :param rot_x_y: (bs, 2)
         """
 
-        bs, num_img, img_feat_dim, h, w = img.shape
+        bs, num_img, img_feat_dim, h, w = img.shape # img_feat_dim=10
         num_pat_img = h // self.img_patch_size
         assert num_img == self.num_img
         # assert img_feat_dim == self.img_feat_dim
@@ -524,7 +524,7 @@ class MVT(nn.Module):
         x = rearrange(x, "b ... d -> b d ...")  # [B, 128, num_img, np, np] TODO: *why* all nan
 
         feat = []
-        _feat = torch.max(torch.max(x, dim=-1)[0], dim=-1)[0] # torch.Size([96, 128, 3]) 找出每个通道的特征图中最大值
+        _feat = torch.max(torch.max(x, dim=-1)[0], dim=-1)[0] # torch.Size([96, 128, 3]) 找出每个通道的特征图中最大值，相当于channel-wise的maxpooling？
         _feat = _feat.view(bs, -1)
         feat.append(_feat)
 
@@ -586,14 +586,14 @@ class MVT(nn.Module):
                     wpt_local = self.get_wpt(
                         out={"trans": trans.clone().detach()},
                         dyn_cam_info=None,
-                    )
+                    ) # 测试时wpt初始为none，通过trans得到wpt
 
                 # projection
                 # (bs, 1, num_img, 2)
                 wpt_img = self.get_pt_loc_on_img(
                     wpt_local.unsqueeze(1), # torch.Size([96, 3])->torch.Size([96, 1, 3])
                     dyn_cam_info=None,
-                ) # torch.Size([96, 1, 3, 2])
+                ) # torch.Size([96, 1, 3, 2]) 分别在多个视角上找到对应点
                 wpt_img = wpt_img.reshape(bs * self.num_img, 2)
 
                 # add noise to wpt image while training
@@ -672,7 +672,7 @@ class MVT(nn.Module):
         h = w = self.img_size
         bs = out["trans"].shape[0]
 
-        q_trans = out["trans"].view(bs, nc, h * w)
+        q_trans = out["trans"].view(bs, nc, h * w) # torch.Size([bs, 3, 50176]) flatten掉高宽，方便后续softmax
         hm = torch.nn.functional.softmax(q_trans, 2)
         hm = hm.view(bs, nc, h, w)
 
@@ -690,7 +690,7 @@ class MVT(nn.Module):
                 else None,
             )
             for i in range(bs)
-        ]
+        ] # bs个torch.Size([1, 1, 3])
         pred_wpt = torch.cat(pred_wpt, 0)
         if self.use_point_renderer:
             pred_wpt = pred_wpt.squeeze(1)
